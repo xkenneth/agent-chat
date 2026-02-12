@@ -7,7 +7,7 @@ fn cmd() -> Command {
 }
 
 fn init_project(tmp: &TempDir) {
-    cmd().arg("init").current_dir(tmp.path()).assert().success();
+    cmd().args(["init", "--project"]).current_dir(tmp.path()).assert().success();
 }
 
 #[test]

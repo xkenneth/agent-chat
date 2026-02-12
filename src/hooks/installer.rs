@@ -3,25 +3,36 @@ use std::fs;
 use std::path::Path;
 use crate::error::Result;
 
+/// Resolve the absolute path to the current binary.
+/// Falls back to "agent-chat" if resolution fails (e.g. in tests).
+fn binary_path() -> String {
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| p.to_str().map(|s| s.to_string()))
+        .unwrap_or_else(|| "agent-chat".to_string())
+}
+
 /// The hooks configuration to install
 fn hooks_config() -> Value {
+    let bin = binary_path();
+    let allow_pattern = format!("Bash({} *)", bin);
     json!({
         "permissions": {
-            "allow": ["Bash(agent-chat *)"]
+            "allow": [allow_pattern]
         },
         "hooks": {
             "SessionStart": [{
                 "matcher": "startup|resume",
                 "hooks": [{
                     "type": "command",
-                    "command": "agent-chat register",
+                    "command": format!("{} register", bin),
                     "timeout": 10
                 }]
             }],
             "Stop": [{
                 "hooks": [{
                     "type": "command",
-                    "command": "agent-chat status",
+                    "command": format!("{} status", bin),
                     "timeout": 5
                 }]
             }],
@@ -29,7 +40,15 @@ fn hooks_config() -> Value {
                 "matcher": "Edit|Write",
                 "hooks": [{
                     "type": "command",
-                    "command": "agent-chat check-lock",
+                    "command": format!("{} check-lock", bin),
+                    "timeout": 5
+                }]
+            },
+            {
+                "matcher": "Bash",
+                "hooks": [{
+                    "type": "command",
+                    "command": format!("{} check-messages", bin),
                     "timeout": 5
                 }]
             }]
@@ -37,14 +56,19 @@ fn hooks_config() -> Value {
     })
 }
 
-/// Install hooks by merging into .claude/settings.local.json.
+/// Install hooks by merging into `.claude/settings.local.json` in the project.
 /// Creates the file and directory if they don't exist.
 /// Merges (not overwrites) to preserve existing settings.
 pub fn install_hooks(project_root: &Path) -> Result<()> {
-    let claude_dir = project_root.join(".claude");
-    fs::create_dir_all(&claude_dir)?;
+    install_hooks_to(&project_root.join(".claude"), "settings.local.json")
+}
 
-    let settings_path = claude_dir.join("settings.local.json");
+/// Install hooks by merging into `<claude_dir>/<filename>`.
+/// Creates the directory and file if they don't exist.
+pub fn install_hooks_to(claude_dir: &Path, filename: &str) -> Result<()> {
+    fs::create_dir_all(claude_dir)?;
+
+    let settings_path = claude_dir.join(filename);
     let mut existing: Value = if settings_path.exists() {
         let content = fs::read_to_string(&settings_path)?;
         serde_json::from_str(&content).unwrap_or_else(|_| json!({}))
@@ -89,23 +113,30 @@ pub fn install_hooks(project_root: &Path) -> Result<()> {
 
                 let mut merged = existing_arr;
                 for entry in new_arr {
-                    // Check if this exact hook command already exists
-                    let already_exists = merged.iter().any(|e| {
+                    // Remove any existing hook whose subcommand matches
+                    // (handles upgrade from bare "agent-chat X" to absolute path)
+                    merged.retain(|e| {
                         if let (Some(e_hooks), Some(n_hooks)) =
                             (e["hooks"].as_array(), entry["hooks"].as_array())
                         {
-                            e_hooks.iter().any(|eh| {
+                            !e_hooks.iter().any(|eh| {
                                 n_hooks.iter().any(|nh| {
-                                    eh["command"] == nh["command"]
+                                    match (eh["command"].as_str(), nh["command"].as_str()) {
+                                        (Some(ec), Some(nc)) => {
+                                            // Compare subcommand: last space-separated tokens
+                                            // e.g. "agent-chat register" and "/path/to/agent-chat register"
+                                            // both end with "agent-chat register"
+                                            ec.ends_with(nc) || nc.ends_with(ec) || ec == nc
+                                        }
+                                        _ => false,
+                                    }
                                 })
                             })
                         } else {
-                            false
+                            true
                         }
                     });
-                    if !already_exists {
-                        merged.push(entry.clone());
-                    }
+                    merged.push(entry.clone());
                 }
                 existing["hooks"][event] = Value::Array(merged);
             }
@@ -113,7 +144,8 @@ pub fn install_hooks(project_root: &Path) -> Result<()> {
     }
 
     let content = serde_json::to_string_pretty(&existing)?;
-    let tmp = claude_dir.join(".tmp.settings.local.json");
+    let tmp_name = format!(".tmp.{}", filename);
+    let tmp = claude_dir.join(tmp_name);
     fs::write(&tmp, &content)?;
     fs::rename(&tmp, &settings_path)?;
     Ok(())
@@ -137,7 +169,11 @@ mod tests {
         assert!(val["hooks"]["SessionStart"].is_array());
         assert!(val["hooks"]["Stop"].is_array());
         assert!(val["hooks"]["PreToolUse"].is_array());
-        assert!(val["permissions"]["allow"].as_array().unwrap().contains(&json!("Bash(agent-chat *)")));
+        // Permission uses absolute binary path
+        let allow = val["permissions"]["allow"].as_array().unwrap();
+        assert!(allow.iter().any(|v| {
+            v.as_str().map(|s| s.starts_with("Bash(") && s.contains("agent-chat") && s.ends_with("*)")).unwrap_or(false)
+        }));
     }
 
     #[test]
@@ -154,7 +190,9 @@ mod tests {
         let val: Value = serde_json::from_str(&content).unwrap();
         let allow = val["permissions"]["allow"].as_array().unwrap();
         assert!(allow.contains(&json!("Bash(git *)")));
-        assert!(allow.contains(&json!("Bash(agent-chat *)")));
+        assert!(allow.iter().any(|v| {
+            v.as_str().map(|s| s.contains("agent-chat")).unwrap_or(false)
+        }));
     }
 
     #[test]

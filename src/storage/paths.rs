@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::fs;
 use crate::error::{AgentChatError, Result};
 
 const DIR_NAME: &str = ".agent-chat";
@@ -48,6 +49,44 @@ pub fn config_path(root: &Path) -> PathBuf {
     root.join("config.toml")
 }
 
+/// Return the user's home directory from `$HOME`.
+pub fn home_dir() -> Result<PathBuf> {
+    std::env::var("HOME")
+        .map(PathBuf::from)
+        .map_err(|_| AgentChatError::MissingEnv("HOME".into()))
+}
+
+/// Append `pattern` to `.git/info/exclude` if not already present.
+/// No-ops silently if the project is not a git repo.
+pub fn add_git_exclude(project_root: &Path, pattern: &str) -> Result<()> {
+    let git_dir = project_root.join(".git");
+    if !git_dir.is_dir() {
+        return Ok(());
+    }
+    let info_dir = git_dir.join("info");
+    fs::create_dir_all(&info_dir)?;
+    let exclude_path = info_dir.join("exclude");
+
+    let existing = if exclude_path.exists() {
+        fs::read_to_string(&exclude_path)?
+    } else {
+        String::new()
+    };
+
+    if existing.lines().any(|line| line.trim() == pattern) {
+        return Ok(());
+    }
+
+    let mut content = existing;
+    if !content.is_empty() && !content.ends_with('\n') {
+        content.push('\n');
+    }
+    content.push_str(pattern);
+    content.push('\n');
+    fs::write(&exclude_path, content)?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -80,5 +119,41 @@ mod tests {
         assert!(tmp.path().join(".agent-chat/locks").is_dir());
         assert!(tmp.path().join(".agent-chat/cursors").is_dir());
         assert!(tmp.path().join(".agent-chat/sessions").is_dir());
+    }
+
+    #[test]
+    fn add_git_exclude_appends_pattern() {
+        let tmp = TempDir::new().unwrap();
+        std::fs::create_dir_all(tmp.path().join(".git/info")).unwrap();
+        add_git_exclude(tmp.path(), ".agent-chat/").unwrap();
+        let content = std::fs::read_to_string(tmp.path().join(".git/info/exclude")).unwrap();
+        assert!(content.contains(".agent-chat/"));
+    }
+
+    #[test]
+    fn add_git_exclude_is_idempotent() {
+        let tmp = TempDir::new().unwrap();
+        std::fs::create_dir_all(tmp.path().join(".git/info")).unwrap();
+        add_git_exclude(tmp.path(), ".agent-chat/").unwrap();
+        add_git_exclude(tmp.path(), ".agent-chat/").unwrap();
+        let content = std::fs::read_to_string(tmp.path().join(".git/info/exclude")).unwrap();
+        assert_eq!(content.matches(".agent-chat/").count(), 1);
+    }
+
+    #[test]
+    fn add_git_exclude_noop_without_git() {
+        let tmp = TempDir::new().unwrap();
+        // No .git directory — should succeed silently
+        add_git_exclude(tmp.path(), ".agent-chat/").unwrap();
+        assert!(!tmp.path().join(".git/info/exclude").exists());
+    }
+
+    #[test]
+    fn add_git_exclude_creates_info_dir() {
+        let tmp = TempDir::new().unwrap();
+        // .git exists but info/ doesn't
+        std::fs::create_dir(tmp.path().join(".git")).unwrap();
+        add_git_exclude(tmp.path(), ".agent-chat/").unwrap();
+        assert!(tmp.path().join(".git/info/exclude").exists());
     }
 }

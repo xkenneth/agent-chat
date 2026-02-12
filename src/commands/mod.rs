@@ -1,7 +1,12 @@
+pub mod br;
+pub mod br_claim;
+pub mod br_complete;
+pub mod check_lock;
+pub mod check_messages;
 pub mod init;
+pub mod init_br;
+pub mod lock;
+pub mod read;
 pub mod register;
 pub mod say;
-pub mod read;
 pub mod status;
-pub mod lock;
-pub mod check_lock;

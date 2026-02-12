@@ -27,10 +27,12 @@ at session start — your name is in `$AGENT_CHAT_NAME`. Use it when referring t
 3. Lock files you'll edit: `agent-chat lock "src/auth/**/*.rs"`
 
 **While working:**
+- Run `agent-chat read` every few tool calls — don't go more than 3-4 turns
+  without checking. Other agents may be waiting on you or sharing info you need.
 - Don't stop to wait for replies. If you've asked a question or are waiting on
-  another agent, move to your next task. The Stop hook will notify you when a
-  message arrives at the end of your turn.
-- If the Stop hook shows unread messages, run `agent-chat read` on your next turn.
+  another agent, move to your next task.
+- If the Stop hook shows unread messages, run `agent-chat read` immediately —
+  do NOT stop without reading them first. Another agent may be blocked on you.
 
 **Finishing a task:**
 1. Unlock your files: `agent-chat unlock "src/auth/**/*.rs"`
@@ -40,7 +42,7 @@ at session start — your name is in `$AGENT_CHAT_NAME`. Use it when referring t
 **When blocked:**
 - Say so: `agent-chat say "blocked on DB schema — need table layout from bold-hawk"`
 - Move to a different task instead of waiting
-- Check back with `agent-chat read` between tasks
+- Run `agent-chat read` before starting the next task
 
 ## Message style
 
@@ -56,15 +58,21 @@ unlock immediately when done. If `check-lock` warns you about a locked file,
 coordinate with the lock owner before editing — don't just ignore the warning.
 <!-- agent-chat:end -->"#;
 
-/// Install or update the agent-chat section in CLAUDE.md.
+/// Install or update the agent-chat section in `<project_root>/CLAUDE.md`.
+pub fn install_claude_md(project_root: &Path) -> Result<()> {
+    install_claude_md_to(project_root)
+}
+
+/// Install or update the agent-chat section in `<target_dir>/CLAUDE.md`.
 /// - No CLAUDE.md: create it with just the agent-chat section
 /// - CLAUDE.md exists with sentinel: replace that section
 /// - CLAUDE.md exists without sentinel: append the section
-pub fn install_claude_md(project_root: &Path) -> Result<()> {
-    let path = project_root.join("CLAUDE.md");
+pub fn install_claude_md_to(target_dir: &Path) -> Result<()> {
+    fs::create_dir_all(target_dir)?;
+    let path = target_dir.join("CLAUDE.md");
 
     if !path.exists() {
-        let tmp = project_root.join(".tmp.CLAUDE.md");
+        let tmp = target_dir.join(".tmp.CLAUDE.md");
         fs::write(&tmp, GUIDANCE)?;
         fs::rename(&tmp, &path)?;
         return Ok(());
@@ -97,7 +105,7 @@ pub fn install_claude_md(project_root: &Path) -> Result<()> {
         }
     };
 
-    let tmp = project_root.join(".tmp.CLAUDE.md");
+    let tmp = target_dir.join(".tmp.CLAUDE.md");
     fs::write(&tmp, &new_content)?;
     fs::rename(&tmp, &path)?;
     Ok(())

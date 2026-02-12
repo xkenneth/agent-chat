@@ -14,12 +14,12 @@ fn main() {
     let cli = Cli::parse();
 
     let result = match cli.command {
-        Command::Init => {
+        Command::Init { project, user, both } => {
             let cwd = std::env::current_dir().unwrap_or_else(|e| {
                 eprintln!("Cannot determine current directory: {}", e);
                 process::exit(1);
             });
-            commands::init::run(&cwd)
+            commands::init::run(&cwd, project, user, both)
         }
         Command::Register => {
             let root = find_root_or_exit();
@@ -57,6 +57,25 @@ fn main() {
         Command::CheckLock => {
             let root = find_root_or_exit();
             commands::check_lock::run(&root)
+        }
+        Command::CheckMessages => {
+            let root = find_root_or_exit();
+            commands::check_messages::run(&root)
+        }
+        Command::InitBr { project, user } => {
+            let cwd = std::env::current_dir().unwrap_or_else(|e| {
+                eprintln!("Cannot determine current directory: {}", e);
+                process::exit(1);
+            });
+            commands::init_br::run(&cwd, project, user)
+        }
+        Command::BrClaim { id } => {
+            let root = find_root_or_exit();
+            commands::br_claim::run(&root, &id)
+        }
+        Command::BrComplete { id, reason } => {
+            let root = find_root_or_exit();
+            commands::br_complete::run(&root, &id, reason.as_deref())
         }
     };
 
