@@ -13,7 +13,19 @@ cargo install --path .
 agent-chat init
 ```
 
-That's it. `init` creates the `.agent-chat/` directory, installs Claude Code hooks into `.claude/settings.local.json`, and adds usage guidance to `CLAUDE.md`. The next time Claude Code starts a session in this project, it will auto-register with a friendly name like `swift-fox` and begin checking for messages.
+That's it. `init` creates the `.agent-chat/` directory, installs Claude Code hooks, and adds usage guidance to `CLAUDE.md`. Without flags it prompts interactively:
+
+```
+Where should hooks and CLAUDE.md be installed?
+  1. Project  — .claude/settings.local.json + ./CLAUDE.md
+  2. User     — ~/.claude/settings.json + ~/.claude/CLAUDE.md
+  3. Both
+>
+```
+
+Or use flags: `agent-chat init --project`, `--user`, or `--both`.
+
+The next time Claude Code starts a session in this project, it will auto-register with a friendly name like `swift-fox` and begin checking for messages.
 
 ## How it works
 
@@ -36,9 +48,11 @@ That's it. `init` creates the `.agent-chat/` directory, installs Claude Code hoo
 
 ## Commands
 
+### Core
+
 | Command | Purpose | Stdout |
 |---------|---------|--------|
-| `init` | Create `.agent-chat/`, install hooks, write `CLAUDE.md` | Setup confirmation |
+| `init [--project\|--user\|--both]` | Create `.agent-chat/`, install hooks, write `CLAUDE.md` | Setup confirmation |
 | `register` | Assign session identity (reads stdin JSON) | `You are swift-fox...` |
 | `say <msg>` | Post to shared log | Nothing |
 | `read [--all]` | Show unread (or all) messages, advance cursor | Messages only |
@@ -46,15 +60,25 @@ That's it. `init` creates the `.agent-chat/` directory, installs Claude Code hoo
 | `lock <glob>` | Advisory file lock with TTL | Confirmation |
 | `unlock <glob>` | Release lock | Confirmation |
 | `locks` | List active locks | Table |
-| `check-lock` | PreToolUse hook, reads stdin JSON | Warning JSON or nothing |
+| `check-lock` | PreToolUse hook (Edit/Write), reads stdin JSON | Warning JSON or nothing |
+| `check-messages` | PreToolUse hook (Bash), injects unread messages | `additionalContext` JSON or nothing |
+
+### Beads (br) integration
+
+| Command | Purpose | Stdout |
+|---------|---------|--------|
+| `init-br [--project\|--user]` | Install br guidance into `CLAUDE.md` | Setup confirmation |
+| `br-claim <id>` | Set issue to `in_progress`, assign self, announce | Nothing |
+| `br-complete <id> [--reason R]` | Close issue, announce completion | Nothing |
 
 ## Hooks
 
-Installed automatically by `init` into `.claude/settings.local.json`:
+Installed automatically by `init` into `.claude/settings.local.json` (project) or `~/.claude/settings.json` (user):
 
-- **SessionStart** — `agent-chat register` reads the session JSON from stdin, generates a friendly name (e.g. `swift-fox`), and writes `AGENT_CHAT_NAME` and `AGENT_CHAT_SESSION_ID` to `$CLAUDE_ENV_FILE` so identity survives context compaction.
-- **Stop** — `agent-chat status` prints `[agent-chat: 3 unread messages]` if there are unread messages, or nothing (zero tokens) if not.
+- **SessionStart** — `agent-chat register` reads the session JSON from stdin, generates a friendly name (e.g. `swift-fox`), writes `AGENT_CHAT_NAME` and `AGENT_CHAT_SESSION_ID` to `$CLAUDE_ENV_FILE` so identity survives context compaction, and injects any unread messages.
+- **Stop** — `agent-chat status` returns `{"decision": "block", "reason": "..."}` if there are unread messages, preventing the agent from stopping until it reads them. Returns nothing (zero tokens) when all caught up.
 - **PreToolUse** (Edit|Write) — `agent-chat check-lock` checks if the target file matches another agent's lock and returns a `hookSpecificOutput` warning if so.
+- **PreToolUse** (Bash) — `agent-chat check-messages` injects unread messages as `additionalContext` before bash commands, so agents stay aware of other agents' activity without explicit `read` calls.
 
 ## Example session
 
