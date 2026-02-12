@@ -1,6 +1,6 @@
 use std::fs;
 use std::path::Path;
-use chrono::{DateTime, NaiveDateTime};
+use chrono::{DateTime, Local, NaiveDateTime};
 use crate::error::{AgentChatError, Result};
 use crate::format;
 use crate::storage::{cursor, log, paths};
@@ -47,9 +47,9 @@ fn parse_timestamp_ns(filename: &str) -> NaiveDateTime {
         let secs = (ns / 1_000_000_000) as i64;
         let nsecs = (ns % 1_000_000_000) as u32;
         DateTime::from_timestamp(secs, nsecs)
-            .map(|dt| dt.naive_utc())
-            .unwrap_or_else(|| chrono::Utc::now().naive_utc())
+            .map(|dt| dt.with_timezone(&Local).naive_local())
+            .unwrap_or_else(|| Local::now().naive_local())
     } else {
-        chrono::Utc::now().naive_utc()
+        Local::now().naive_local()
     }
 }
