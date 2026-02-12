@@ -99,6 +99,11 @@ fn init_creates_claude_md() {
     assert!(content.contains("agent-chat read"));
     assert!(content.contains("agent-chat say"));
     assert!(content.contains("agent-chat lock"));
+    // Workflow guidance
+    assert!(content.contains("## Workflow"));
+    assert!(content.contains("Starting a task"));
+    assert!(content.contains("Don't stop to wait for replies"));
+    assert!(content.contains("## Message style"));
 }
 
 #[test]
