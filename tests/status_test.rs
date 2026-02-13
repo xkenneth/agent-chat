@@ -189,3 +189,29 @@ fn status_performance() {
         elapsed.as_millis()
     );
 }
+
+#[test]
+fn status_noop_when_identity_missing() {
+    let tmp = TempDir::new().unwrap();
+    init_project(&tmp);
+
+    // Create messages from another agent.
+    cmd()
+        .args(["say", "hello"])
+        .current_dir(tmp.path())
+        .env("AGENT_CHAT_NAME", "swift-fox")
+        .env("AGENT_CHAT_SESSION_ID", "sess1")
+        .assert()
+        .success();
+
+    // No AGENT_CHAT_* env and multiple sessions -> unresolved identity.
+    // Stop hook should not block in this case.
+    cmd()
+        .arg("status")
+        .current_dir(tmp.path())
+        .env_remove("AGENT_CHAT_NAME")
+        .env_remove("AGENT_CHAT_SESSION_ID")
+        .assert()
+        .success()
+        .stdout(predicate::str::is_empty());
+}
