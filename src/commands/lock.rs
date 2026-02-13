@@ -1,28 +1,26 @@
 use std::path::Path;
-use crate::error::{AgentChatError, Result};
-use crate::storage::{config, lockfile, paths};
+use crate::error::Result;
+use crate::storage::{config, identity, lockfile, paths};
+use crate::ui;
 
 pub fn acquire(root: &Path, glob: &str) -> Result<()> {
-    let name = std::env::var("AGENT_CHAT_NAME")
-        .map_err(|_| AgentChatError::MissingEnv("AGENT_CHAT_NAME".to_string()))?;
-    let session_id = std::env::var("AGENT_CHAT_SESSION_ID")
-        .map_err(|_| AgentChatError::MissingEnv("AGENT_CHAT_SESSION_ID".to_string()))?;
+    let id = identity::resolve(root)?;
+    let name = identity::require_name(&id)?;
 
     let config = config::read_config(&paths::config_path(root))?;
     let locks_dir = paths::locks_dir(root);
 
-    lockfile::acquire(&locks_dir, glob, &name, &session_id, config.lock_ttl_secs)?;
-    println!("Locked: {}", glob);
+    lockfile::acquire(&locks_dir, glob, name, &id.session_id, config.lock_ttl_secs)?;
+    println!("{}", ui::success_line("Locked:", glob));
     Ok(())
 }
 
 pub fn release(root: &Path, glob: &str) -> Result<()> {
-    let session_id = std::env::var("AGENT_CHAT_SESSION_ID")
-        .map_err(|_| AgentChatError::MissingEnv("AGENT_CHAT_SESSION_ID".to_string()))?;
+    let id = identity::resolve(root)?;
 
     let locks_dir = paths::locks_dir(root);
-    lockfile::release(&locks_dir, glob, &session_id)?;
-    println!("Unlocked: {}", glob);
+    lockfile::release(&locks_dir, glob, &id.session_id)?;
+    println!("{}", ui::success_line("Unlocked:", glob));
     Ok(())
 }
 
@@ -31,11 +29,11 @@ pub fn list(root: &Path) -> Result<()> {
     let locks = lockfile::list_active(&locks_dir)?;
 
     if locks.is_empty() {
-        println!("No active locks.");
+        println!("{}", ui::info_line("Locks:", "No active locks."));
         return Ok(());
     }
 
-    println!("{:<30} {:<15} {}", "PATTERN", "OWNER", "TTL");
+    println!("{}", ui::table_header("PATTERN", "OWNER", Some("TTL")));
     for lock in &locks {
         let remaining = (lock.acquired_at + lock.ttl_secs).saturating_sub(
             std::time::SystemTime::now()

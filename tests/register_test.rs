@@ -233,3 +233,49 @@ fn register_injects_existing_messages() {
         context
     );
 }
+
+#[test]
+fn register_accepts_session_id_flag_without_stdin() {
+    let tmp = TempDir::new().unwrap();
+    init_project(&tmp);
+
+    let output = cmd()
+        .args(["register", "--session-id", "codex-session-1"])
+        .current_dir(tmp.path())
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let context = extract_context(&output.stdout);
+    assert!(context.contains("You are "), "context should contain identity: {}", context);
+    assert!(tmp.path().join(".agent-chat/sessions/codex-session-1").exists());
+}
+
+#[test]
+fn register_session_id_flag_takes_precedence_over_stdin() {
+    let tmp = TempDir::new().unwrap();
+    init_project(&tmp);
+
+    cmd()
+        .args(["register", "--session-id", "flag-session"])
+        .current_dir(tmp.path())
+        .write_stdin(r#"{"session_id":"stdin-session"}"#)
+        .assert()
+        .success();
+
+    assert!(tmp.path().join(".agent-chat/sessions/flag-session").exists());
+    assert!(!tmp.path().join(".agent-chat/sessions/stdin-session").exists());
+}
+
+#[test]
+fn register_rejects_empty_session_id_flag() {
+    let tmp = TempDir::new().unwrap();
+    init_project(&tmp);
+
+    cmd()
+        .args(["register", "--session-id", "   "])
+        .current_dir(tmp.path())
+        .assert()
+        .success()
+        .stderr(predicates::str::contains("session_id cannot be empty"));
+}

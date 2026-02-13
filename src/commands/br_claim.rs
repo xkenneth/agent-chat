@@ -2,6 +2,7 @@ use std::path::Path;
 use std::process::Command;
 use crate::commands::{br, say};
 use crate::error::{AgentChatError, Result};
+use crate::storage::{focus, paths};
 
 pub fn run(root: &Path, id: &str) -> Result<()> {
     br::require_br_in_path()?;
@@ -20,6 +21,19 @@ pub fn run(root: &Path, id: &str) -> Result<()> {
     }
 
     let title = br::get_issue_title(id)?;
+
+    // Check for focus overlaps (advisory warning only)
+    let session_id = std::env::var("AGENT_CHAT_SESSION_ID").unwrap_or_default();
+    let focuses_dir = paths::focuses_dir(root);
+    if let Ok(overlaps) = focus::find_overlapping(&focuses_dir, &title, &session_id) {
+        for o in &overlaps {
+            eprintln!(
+                "WARNING: {} is focused on '{}' — may overlap with bead {} '{}'",
+                o.owner, o.focus, id, title
+            );
+        }
+    }
+
     say::run(root, &format!("starting br-{}: {}", id, title))?;
 
     Ok(())

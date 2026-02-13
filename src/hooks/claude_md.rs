@@ -18,6 +18,9 @@ at session start — your name is in `$AGENT_CHAT_NAME`. Use it when referring t
 - `agent-chat lock <glob>` — claim advisory file lock before editing
 - `agent-chat unlock <glob>` — release when done
 - `agent-chat locks` — see who's locked what
+- `agent-chat focus "<area>"` — declare your focus area
+- `agent-chat focus --clear` — clear your focus
+- `agent-chat focuses` — see who's focused on what
 
 ## Workflow
 
@@ -25,6 +28,7 @@ at session start — your name is in `$AGENT_CHAT_NAME`. Use it when referring t
 1. Run `agent-chat read` to catch up on any messages
 2. Say what you're about to work on: `agent-chat say "starting on auth middleware"`
 3. Lock files you'll edit: `agent-chat lock "src/auth/**/*.rs"`
+4. Declare your focus: `agent-chat focus "auth middleware"`
 
 **While working:**
 - Run `agent-chat read` every few tool calls — don't go more than 3-4 turns
@@ -36,8 +40,9 @@ at session start — your name is in `$AGENT_CHAT_NAME`. Use it when referring t
 
 **Finishing a task:**
 1. Unlock your files: `agent-chat unlock "src/auth/**/*.rs"`
-2. Announce completion: `agent-chat say "auth middleware done, tests passing"`
-3. Run `agent-chat read` to check if anything came in while you were working
+2. Clear your focus: `agent-chat focus --clear`
+3. Announce completion: `agent-chat say "auth middleware done, tests passing"`
+4. Run `agent-chat read` to check if anything came in while you were working
 
 **When blocked:**
 - Say so: `agent-chat say "blocked on DB schema — need table layout from bold-hawk"`
@@ -56,6 +61,12 @@ Keep messages short and actionable. Other agents pay tokens to read them.
 Locks are advisory and expire after 5 minutes. Lock before multi-file edits,
 unlock immediately when done. If `check-lock` warns you about a locked file,
 coordinate with the lock owner before editing — don't just ignore the warning.
+
+## Focus areas
+
+Focus is advisory — declare what domain you're working in so other agents
+avoid overlap. Expires after 5 minutes like locks. When claiming a bead that
+overlaps with another agent's focus, you'll see a warning.
 <!-- agent-chat:end -->"#;
 
 /// Install or update the agent-chat section in `<project_root>/CLAUDE.md`.

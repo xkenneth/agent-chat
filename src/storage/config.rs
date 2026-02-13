@@ -6,9 +6,15 @@ use crate::error::Result;
 pub struct Config {
     #[serde(default = "default_lock_ttl")]
     pub lock_ttl_secs: u64,
+    #[serde(default = "default_focus_ttl")]
+    pub focus_ttl_secs: u64,
 }
 
 fn default_lock_ttl() -> u64 {
+    300
+}
+
+fn default_focus_ttl() -> u64 {
     300
 }
 
@@ -16,6 +22,7 @@ impl Default for Config {
     fn default() -> Self {
         Config {
             lock_ttl_secs: default_lock_ttl(),
+            focus_ttl_secs: default_focus_ttl(),
         }
     }
 }

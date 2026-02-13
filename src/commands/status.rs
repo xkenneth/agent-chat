@@ -2,20 +2,18 @@ use std::path::Path;
 use serde_json::json;
 use crate::error::Result;
 use crate::format;
-use crate::storage::{cursor, paths};
+use crate::storage::{cursor, identity, paths};
 
 const DEFAULT_FIRST_READ_COUNT: usize = 10;
 
 pub fn run(root: &Path) -> Result<()> {
     let log_dir = paths::log_dir(root);
 
-    // Try to get session_id from env; if missing, just check if any messages exist
-    let session_id = std::env::var("AGENT_CHAT_SESSION_ID").ok();
-    // Filter out own messages so agents don't get nudged about their own posts
-    let my_name = std::env::var("AGENT_CHAT_NAME").ok();
-    let exclude = my_name.as_deref();
+    let id = identity::resolve(root).ok();
+    let session_id = id.as_ref().map(|i| i.session_id.as_str());
+    let exclude = id.as_ref().and_then(|i| i.name.as_deref());
 
-    let has_unread = if let Some(ref sid) = session_id {
+    let has_unread = if let Some(sid) = session_id {
         let cursors_dir = paths::cursors_dir(root);
         let cursor_file = cursor::cursor_path(&cursors_dir, sid);
         cursor::has_unread(&log_dir, &cursor_file)?
@@ -29,7 +27,7 @@ pub fn run(root: &Path) -> Result<()> {
     }
 
     // Get unread message paths
-    let message_paths = if let Some(ref sid) = session_id {
+    let message_paths = if let Some(sid) = session_id {
         let cursors_dir = paths::cursors_dir(root);
         let cursor_file = cursor::cursor_path(&cursors_dir, sid);
         cursor::get_unread_messages(&log_dir, &cursor_file, DEFAULT_FIRST_READ_COUNT, exclude)?

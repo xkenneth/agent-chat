@@ -329,3 +329,65 @@ fn read_no_messages_no_output() {
         .success()
         .stdout(predicate::str::is_empty());
 }
+
+#[test]
+fn say_works_without_env_when_single_session_registered() {
+    let tmp = TempDir::new().unwrap();
+    init_project(&tmp);
+
+    cmd()
+        .args(["register", "--session-id", "codex-solo"])
+        .current_dir(tmp.path())
+        .assert()
+        .success();
+
+    cmd()
+        .args(["say", "hello", "from", "fallback"])
+        .current_dir(tmp.path())
+        .env_remove("AGENT_CHAT_NAME")
+        .env_remove("AGENT_CHAT_SESSION_ID")
+        .assert()
+        .success();
+
+    let log_dir = tmp.path().join(".agent-chat/log");
+    let mut found = false;
+    for entry in std::fs::read_dir(log_dir).unwrap().flatten() {
+        let content = std::fs::read_to_string(entry.path()).unwrap_or_default();
+        if content.contains("hello from fallback") {
+            found = true;
+            break;
+        }
+    }
+    assert!(found, "expected fallback message to be written");
+}
+
+#[test]
+fn read_works_without_env_when_single_session_registered() {
+    let tmp = TempDir::new().unwrap();
+    init_project(&tmp);
+
+    // Only one registered session exists (receiver), so fallback can infer it.
+    cmd()
+        .args(["register", "--session-id", "receiver-session"])
+        .current_dir(tmp.path())
+        .assert()
+        .success();
+
+    // Another identity posts into the chat.
+    cmd()
+        .args(["say", "from sender"])
+        .current_dir(tmp.path())
+        .env("AGENT_CHAT_NAME", "sender-name")
+        .env("AGENT_CHAT_SESSION_ID", "sender-session")
+        .assert()
+        .success();
+
+    cmd()
+        .arg("read")
+        .current_dir(tmp.path())
+        .env_remove("AGENT_CHAT_NAME")
+        .env_remove("AGENT_CHAT_SESSION_ID")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("from sender"));
+}

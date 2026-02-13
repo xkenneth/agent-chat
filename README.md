@@ -1,8 +1,8 @@
 # agent-chat
 
-File-based chatroom for Claude Code agents. No server, no database, no MCP protocol — just flat files and a single static binary.
+File-based chatroom for Claude Code and Codex agents. No server, no database, no MCP protocol — just flat files and a single static binary.
 
-Multiple Claude Code sessions working on the same project can coordinate through a shared message log with advisory file locking. Hook integration is automatic: `agent-chat init` installs everything.
+Multiple agent sessions working on the same project can coordinate through a shared message log with advisory file locking. `agent-chat init` can install Claude integration, Codex integration, or both.
 
 ## Quick start
 
@@ -13,17 +13,33 @@ cargo install --path .
 agent-chat init
 ```
 
-That's it. `init` creates the `.agent-chat/` directory, installs Claude Code hooks, and adds usage guidance to `CLAUDE.md`. Without flags it prompts interactively:
+That's it. `init` creates the `.agent-chat/` directory and can install Claude integration, Codex integration, or both. Without flags it prompts interactively:
 
 ```
-Where should hooks and CLAUDE.md be installed?
-  1. Project  — .claude/settings.local.json + ./CLAUDE.md
-  2. User     — ~/.claude/settings.json + ~/.claude/CLAUDE.md
-  3. Both
->
+Agent Chat setup
+Choose integration(s):
+  [1] Claude (hooks + CLAUDE.md)
+  [2] Codex  (AGENTS.md)
+  [3] Both (default)
+Select 1/2/3 (Enter = default) >
 ```
 
-Or use flags: `agent-chat init --project`, `--user`, or `--both`.
+Second prompt default is `User` install target when you press Enter.
+
+Or use flags, e.g. `agent-chat init --project --claude`, `agent-chat init --project --codex`, or `agent-chat init --project --both-tools`.
+
+For Codex guidance (AGENTS.md instead of Claude hooks):
+
+```bash
+agent-chat init-codex --project
+agent-chat register --session-id "<your-session-id>"
+```
+
+For mixed projects (Claude + Codex in the same repo), use:
+
+```bash
+agent-chat init --project --both-tools
+```
 
 The next time Claude Code starts a session in this project, it will auto-register with a friendly name like `swift-fox` and begin checking for messages.
 
@@ -52,8 +68,8 @@ The next time Claude Code starts a session in this project, it will auto-registe
 
 | Command | Purpose | Stdout |
 |---------|---------|--------|
-| `init [--project\|--user\|--both]` | Create `.agent-chat/`, install hooks, write `CLAUDE.md` | Setup confirmation |
-| `register` | Assign session identity (reads stdin JSON) | `You are swift-fox...` |
+| `init [--project\|--user\|--both] [--claude\|--codex\|--both-tools]` | Create `.agent-chat/`, install selected integration(s) | Setup confirmation |
+| `register [--session-id <id>]` | Assign session identity (stdin JSON for hooks, or explicit id) | `You are swift-fox...` |
 | `say <msg>` | Post to shared log | Nothing |
 | `read [--all]` | Show unread (or all) messages, advance cursor | Messages only |
 | `status` | Unread check for Stop hook | `[agent-chat: N unread]` or nothing |
@@ -70,6 +86,17 @@ The next time Claude Code starts a session in this project, it will auto-registe
 | `init-br [--project\|--user]` | Install br guidance into `CLAUDE.md` | Setup confirmation |
 | `br-claim <id>` | Set issue to `in_progress`, assign self, announce | Nothing |
 | `br-complete <id> [--reason R]` | Close issue, announce completion | Nothing |
+| `init-codex [--project\|--user\|--both]` | Install Codex guidance into `AGENTS.md` | Setup confirmation |
+
+## Claude + Codex compatibility
+
+- Both tools share the same `.agent-chat/` state (messages, sessions, cursors, locks, focuses).
+- Claude sessions auto-register via hooks and get env wiring from `CLAUDE_ENV_FILE`.
+- Codex sessions register with `agent-chat register --session-id <id>`.
+- After registration, commands resolve identity with env-first semantics:
+  - If env is present, use it.
+  - If env is missing, use `.agent-chat/sessions/<session_id>`.
+  - If `session_id` is missing and exactly one session exists, infer it automatically.
 
 ## Hooks
 

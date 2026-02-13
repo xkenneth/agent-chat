@@ -26,6 +26,7 @@ pub fn create_dirs(project_root: &Path) -> Result<()> {
     std::fs::create_dir_all(base.join("locks"))?;
     std::fs::create_dir_all(base.join("cursors"))?;
     std::fs::create_dir_all(base.join("sessions"))?;
+    std::fs::create_dir_all(base.join("focuses"))?;
     Ok(())
 }
 
@@ -43,6 +44,10 @@ pub fn cursors_dir(root: &Path) -> PathBuf {
 
 pub fn sessions_dir(root: &Path) -> PathBuf {
     root.join("sessions")
+}
+
+pub fn focuses_dir(root: &Path) -> PathBuf {
+    root.join("focuses")
 }
 
 pub fn config_path(root: &Path) -> PathBuf {
@@ -119,6 +124,7 @@ mod tests {
         assert!(tmp.path().join(".agent-chat/locks").is_dir());
         assert!(tmp.path().join(".agent-chat/cursors").is_dir());
         assert!(tmp.path().join(".agent-chat/sessions").is_dir());
+        assert!(tmp.path().join(".agent-chat/focuses").is_dir());
     }
 
     #[test]

@@ -1,22 +1,20 @@
 use std::fs;
 use std::path::Path;
-use crate::error::{AgentChatError, Result};
+use crate::error::Result;
 use crate::format;
-use crate::storage::{cursor, log, paths};
+use crate::storage::{cursor, identity, log, paths};
 
 const DEFAULT_FIRST_READ_COUNT: usize = 5;
 
 pub fn run(root: &Path, show_all: bool) -> Result<()> {
-    let session_id = std::env::var("AGENT_CHAT_SESSION_ID")
-        .map_err(|_| AgentChatError::MissingEnv("AGENT_CHAT_SESSION_ID".to_string()))?;
+    let id = identity::resolve(root)?;
 
     // Filter out own messages to avoid wasting tokens
-    let my_name = std::env::var("AGENT_CHAT_NAME").ok();
-    let exclude = my_name.as_deref();
+    let exclude = id.name.as_deref();
 
     let log_dir = paths::log_dir(root);
     let cursors_dir = paths::cursors_dir(root);
-    let cursor_file = cursor::cursor_path(&cursors_dir, &session_id);
+    let cursor_file = cursor::cursor_path(&cursors_dir, &id.session_id);
 
     let message_paths = if show_all {
         let msgs = log::list_messages(&log_dir)?;
@@ -59,4 +57,3 @@ pub fn run(root: &Path, show_all: bool) -> Result<()> {
 
     Ok(())
 }
-

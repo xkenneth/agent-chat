@@ -4,23 +4,22 @@ use crate::error::{AgentChatError, Result};
 use crate::format;
 use crate::hooks::stdin;
 use crate::names;
-use crate::storage::{cursor, log, paths, session};
+use crate::storage::{cursor, focus, log, paths, session};
 
-pub fn run(root: &Path) -> Result<()> {
-    let input = stdin::read_session_start()?;
-    let session_id = &input.session_id;
+pub fn run(root: &Path, session_id: Option<&str>) -> Result<()> {
+    let session_id = resolve_session_id(session_id)?;
 
     let sessions_dir = paths::sessions_dir(root);
     let log_dir = paths::log_dir(root);
     let cursors_dir = paths::cursors_dir(root);
-    let cursor_file = cursor::cursor_path(&cursors_dir, session_id);
+    let cursor_file = cursor::cursor_path(&cursors_dir, &session_id);
 
     // Check if already registered (idempotent)
-    let (name, is_new) = if let Some(existing) = session::read_session(&sessions_dir, session_id)? {
+    let (name, is_new) = if let Some(existing) = session::read_session(&sessions_dir, &session_id)? {
         (existing, false)
     } else {
         let name = names::generate_name();
-        session::write_session(&sessions_dir, session_id, &name)?;
+        session::write_session(&sessions_dir, &session_id, &name)?;
         (name, true)
     };
 
@@ -41,10 +40,22 @@ pub fn run(root: &Path) -> Result<()> {
     }
 
     // Build identity string
-    let identity = format!(
+    let mut identity = format!(
         "You are {}. Use 'agent-chat say <message>' to talk, 'agent-chat read' to check messages.",
         name
     );
+
+    // Append active focuses from other agents
+    let focuses_dir = paths::focuses_dir(root);
+    if let Ok(focuses) = focus::list_active(&focuses_dir) {
+        let other_focuses: Vec<_> = focuses.iter().filter(|f| f.owner != name).collect();
+        if !other_focuses.is_empty() {
+            identity.push_str("\n\n[Active agent focuses]");
+            for f in &other_focuses {
+                identity.push_str(&format!("\n  - {} is focused on: {}", f.owner, f.focus));
+            }
+        }
+    }
 
     // Inject existing unread messages
     let unread = cursor::get_unread_messages(&log_dir, &cursor_file, 50, Some(&name))?;
@@ -67,4 +78,19 @@ pub fn run(root: &Path) -> Result<()> {
     });
     print!("{}", output);
     Ok(())
+}
+
+fn resolve_session_id(explicit: Option<&str>) -> Result<String> {
+    if let Some(id) = explicit {
+        let trimmed = id.trim();
+        if trimmed.is_empty() {
+            return Err(AgentChatError::Other(
+                "session_id cannot be empty".to_string()
+            ));
+        }
+        return Ok(trimmed.to_string());
+    }
+
+    let input = stdin::read_session_start()?;
+    Ok(input.session_id)
 }

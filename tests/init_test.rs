@@ -25,6 +25,7 @@ fn init_project_creates_directory_structure() {
     assert!(tmp.path().join(".agent-chat/sessions").is_dir());
     assert!(tmp.path().join(".agent-chat/config.toml").exists());
     assert!(tmp.path().join("CLAUDE.md").exists());
+    assert!(!tmp.path().join("AGENTS.md").exists());
 }
 
 #[test]
@@ -48,6 +49,9 @@ fn init_project_installs_hooks() {
     assert!(val["hooks"]["SessionStart"].is_array());
     assert!(val["hooks"]["Stop"].is_array());
     assert!(val["hooks"]["PreToolUse"].is_array());
+
+    // Claude init should remain Claude-specific (no Codex guidance side effects)
+    assert!(!tmp.path().join("AGENTS.md").exists());
 }
 
 #[test]
@@ -280,6 +284,39 @@ fn init_both_project_and_user_flags_equals_both() {
     assert!(fake_home.path().join(".claude/settings.json").exists());
 }
 
+#[test]
+fn init_project_codex_installs_agents_only() {
+    let tmp = TempDir::new().unwrap();
+
+    cmd()
+        .args(["init", "--project", "--codex"])
+        .current_dir(tmp.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Codex guidance"));
+
+    assert!(tmp.path().join(".agent-chat/log").is_dir());
+    assert!(tmp.path().join("AGENTS.md").exists());
+    assert!(!tmp.path().join("CLAUDE.md").exists());
+    assert!(!tmp.path().join(".claude/settings.local.json").exists());
+}
+
+#[test]
+fn init_project_both_tools_installs_claude_and_codex() {
+    let tmp = TempDir::new().unwrap();
+
+    cmd()
+        .args(["init", "--project", "--both-tools"])
+        .current_dir(tmp.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Claude + Codex"));
+
+    assert!(tmp.path().join("AGENTS.md").exists());
+    assert!(tmp.path().join("CLAUDE.md").exists());
+    assert!(tmp.path().join(".claude/settings.local.json").exists());
+}
+
 // ── no flags without stdin shows error ──────────────────────────────
 
 #[test]
@@ -291,9 +328,36 @@ fn init_no_flags_no_stdin_shows_error() {
         .args(["init"])
         .current_dir(tmp.path())
         .assert()
-        .stderr(predicate::str::contains("Where should hooks"))
+        .stderr(predicate::str::contains("Choose integration(s):"))
         .stderr(predicate::str::contains("no input"));
 
     // Init should not have completed — no project CLAUDE.md
     assert!(!tmp.path().join("CLAUDE.md").exists());
+}
+
+#[test]
+fn init_no_flags_enter_defaults_to_both_tools_and_user_target() {
+    let tmp = TempDir::new().unwrap();
+    let fake_home = TempDir::new().unwrap();
+    std::fs::create_dir(tmp.path().join(".git")).unwrap();
+
+    cmd()
+        .arg("init")
+        .env("HOME", fake_home.path())
+        .current_dir(tmp.path())
+        .write_stdin("\n\n")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Claude + Codex integrations (user)"));
+
+    // Project state
+    assert!(tmp.path().join(".agent-chat/log").is_dir());
+    assert!(!tmp.path().join(".claude/settings.local.json").exists());
+    assert!(!tmp.path().join("CLAUDE.md").exists());
+    assert!(!tmp.path().join("AGENTS.md").exists());
+
+    // User state defaults
+    assert!(fake_home.path().join(".claude/settings.json").exists());
+    assert!(fake_home.path().join(".claude/CLAUDE.md").exists());
+    assert!(fake_home.path().join(".codex/AGENTS.md").exists());
 }
